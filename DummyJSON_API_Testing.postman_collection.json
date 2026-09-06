@@ -1,0 +1,524 @@
+{
+  "info": {
+    "_postman_id": "b7e2b1a0-4f2e-4a3a-9d1a-dummyjson0001",
+    "name": "DummyJSON API Testing - Products (Auth + CRUD)",
+    "description": "Formative assignment collection: exploring and testing the DummyJSON REST API (https://dummyjson.com) using JWT authentication and full CRUD operations on the Products resource. Includes environment variables, a collection-level pre-request script for automatic token handling, and Postman test scripts for automation via the Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level pre-request script.",
+          "// Runs before EVERY request in this collection.",
+          "// If no valid access token is stored in the environment, it logs in automatically",
+          "// and stores the token(s) before the actual request fires.",
+          "",
+          "const baseUrl = pm.environment.get('base_url');",
+          "const existingToken = pm.environment.get('auth_token');",
+          "",
+          "if (!existingToken) {",
+          "    pm.sendRequest({",
+          "        url: baseUrl + '/auth/login',",
+          "        method: 'POST',",
+          "        header: { 'Content-Type': 'application/json' },",
+          "        body: {",
+          "            mode: 'raw',",
+          "            raw: JSON.stringify({",
+          "                username: pm.environment.get('username'),",
+          "                password: pm.environment.get('password'),",
+          "                expiresInMins: 30",
+          "            })",
+          "        }",
+          "    }, function (err, res) {",
+          "        if (err) {",
+          "            console.error('Auto-login failed:', err);",
+          "            return;",
+          "        }",
+          "        var jsonData = res.json();",
+          "        pm.environment.set('auth_token', jsonData.accessToken);",
+          "        pm.environment.set('refresh_token', jsonData.refreshToken);",
+          "        console.log('Auto-login successful, token stored for this run.');",
+          "    });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level TEST script (runs AFTER every response, for every request).",
+          "// Detects an expired/rejected token (401), silently refreshes it, and automatically",
+          "// re-queues THIS SAME request so it runs again with the new token \u2014 no manual",
+          "// re-click needed when running via the Collection Runner or a sequential Run.",
+          "// A per-request retry-guard variable prevents an infinite retry loop if the token",
+          "// truly cannot be renewed (e.g. refresh_token itself has expired).",
+          "",
+          "if (pm.response.code === 401) {",
+          "    const alreadyRetried = pm.environment.get('_retried_' + pm.info.requestName);",
+          "",
+          "    if (!alreadyRetried) {",
+          "        console.log('401 received on \"' + pm.info.requestName + '\" \u2014 attempting silent token refresh...');",
+          "        const baseUrl = pm.environment.get('base_url');",
+          "        const refreshToken = pm.environment.get('refresh_token');",
+          "",
+          "        pm.sendRequest({",
+          "            url: baseUrl + '/auth/refresh',",
+          "            method: 'POST',",
+          "            header: { 'Content-Type': 'application/json' },",
+          "            body: {",
+          "                mode: 'raw',",
+          "                raw: JSON.stringify({ refreshToken: refreshToken, expiresInMins: 30 })",
+          "            }",
+          "        }, function (refreshErr, refreshRes) {",
+          "            if (!refreshErr && refreshRes.code === 200) {",
+          "                var jsonData = refreshRes.json();",
+          "                pm.environment.set('auth_token', jsonData.accessToken);",
+          "                pm.environment.set('refresh_token', jsonData.refreshToken);",
+          "                console.log('Token refreshed successfully. Re-queuing \"' + pm.info.requestName + '\".');",
+          "            } else {",
+          "                // Refresh token itself is no good (e.g. also expired) \u2014 fall back to a full login.",
+          "                console.log('Refresh failed, falling back to full re-login...');",
+          "                pm.sendRequest({",
+          "                    url: baseUrl + '/auth/login',",
+          "                    method: 'POST',",
+          "                    header: { 'Content-Type': 'application/json' },",
+          "                    body: {",
+          "                        mode: 'raw',",
+          "                        raw: JSON.stringify({",
+          "                            username: pm.environment.get('username'),",
+          "                            password: pm.environment.get('password'),",
+          "                            expiresInMins: 30",
+          "                        })",
+          "                    }",
+          "                }, function (loginErr, loginRes) {",
+          "                    if (!loginErr && loginRes.code === 200) {",
+          "                        var jsonData = loginRes.json();",
+          "                        pm.environment.set('auth_token', jsonData.accessToken);",
+          "                        pm.environment.set('refresh_token', jsonData.refreshToken);",
+          "                    }",
+          "                });",
+          "            }",
+          "",
+          "            // Mark this request as already retried once, then re-run it automatically.",
+          "            // Works when the collection is executed via Collection Runner / Run (sequential",
+          "            // execution); for a single standalone Send click, simply click Send again \u2014",
+          "            // the token is now valid so the retry will succeed.",
+          "            pm.environment.set('_retried_' + pm.info.requestName, 'true');",
+          "            pm.execution.setNextRequest(pm.info.requestName);",
+          "        });",
+          "    } else {",
+          "        // Already retried once for this request and still failing \u2014 stop, don't loop forever.",
+          "        pm.environment.unset('_retried_' + pm.info.requestName);",
+          "        console.error('Retry already attempted for \"' + pm.info.requestName + '\" and still failing \u2014 check credentials/refresh token manually.');",
+          "    }",
+          "} else {",
+          "    // Successful response \u2014 clear any stale retry-guard so future expiries can retry again.",
+          "    pm.environment.unset('_retried_' + pm.info.requestName);",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "https://dummyjson.com", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Login (POST) - Get Access & Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\",\n  \"expiresInMins\": 30\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Authenticates against DummyJSON and returns a JWT accessToken and refreshToken. Credentials come from the environment (username/password) rather than being hardcoded."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains accessToken and refreshToken', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.accessToken).to.exist;",
+                  "    pm.expect(jsonData.refreshToken).to.exist;",
+                  "});",
+                  "",
+                  "// Store tokens dynamically for use in every subsequent request",
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set('auth_token', jsonData.accessToken);",
+                  "pm.environment.set('refresh_token', jsonData.refreshToken);",
+                  "pm.environment.set('logged_in_user_id', jsonData.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Auth User (GET) - Validate Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Confirms the stored access token is valid by requesting the profile of the currently authenticated user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returned user matches logged in user', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.eql(parseInt(pm.environment.get('logged_in_user_id')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token (POST) - Renew Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\",\n  \"expiresInMins\": 30\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Issues a new access token + refresh token without re-sending username/password, simulating token expiry handling."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set('auth_token', jsonData.accessToken);",
+                  "pm.environment.set('refresh_token', jsonData.refreshToken);",
+                  "",
+                  "pm.test('New access token was issued', function () {",
+                  "    pm.expect(jsonData.accessToken).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login with Invalid Credentials (Negative Test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"invalidUser\",\n  \"password\": \"wrongPassword\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Error-handling test: confirms the API correctly rejects bad credentials instead of silently failing."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400 or 401 for invalid credentials', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 401]);",
+                  "});",
+                  "",
+                  "pm.test('Response contains an error message', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Products CRUD",
+      "item": [
+        {
+          "name": "GET All Products",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["products"],
+              "query": [{ "key": "limit", "value": "10" }]
+            },
+            "description": "Retrieves a paginated list of products."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has a products array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.products).to.be.an('array');",
+                  "});",
+                  "",
+                  "// Store the first product's id for the GET-single request",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.products && jsonData.products.length > 0) {",
+                  "    pm.environment.set('product_id', jsonData.products[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Single Product",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["products", "{{product_id}}"]
+            },
+            "description": "Retrieves a single product by its ID (dynamically stored from the GET All Products response)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has ID matching request', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.eql(parseInt(pm.environment.get('product_id')));",
+                  "});",
+                  "",
+                  "pm.test('Response time is less than 1000ms', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(1000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Cisco Catalyst 9300 Switch\",\n  \"category\": \"networking-equipment\",\n  \"price\": 4599.99,\n  \"brand\": \"Cisco\",\n  \"stock\": 12\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/products/add",
+              "host": ["{{base_url}}"],
+              "path": ["products", "add"]
+            },
+            "description": "Creates a new product resource. DummyJSON simulates the write and returns the created object with a new ID (it is not persisted server-side, by design of the mock API)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200/201', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "",
+                  "pm.test('Response has ID', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Created title matches request body', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.title).to.eql('Cisco Catalyst 9300 Switch');",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set('created_product_id', jsonData.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 3999.99,\n  \"stock\": 25\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["products", "{{product_id}}"]
+            },
+            "description": "Updates price and stock on an existing product using PUT (partial update behaves like PATCH on this mock API)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Price was updated', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.price).to.eql(3999.99);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE Product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["products", "{{product_id}}"]
+            },
+            "description": "Deletes the product. DummyJSON returns the deleted object with isDeleted:true and a deletedOn timestamp."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response confirms deletion', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.isDeleted).to.eql(true);",
+                  "    pm.expect(jsonData.deletedOn).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Error Handling",
+      "item": [
+        {
+          "name": "GET Non-existent Product (404 Test)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{auth_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products/999999",
+              "host": ["{{base_url}}"],
+              "path": ["products", "999999"]
+            },
+            "description": "Confirms the API returns a proper 404 for a resource that does not exist."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
