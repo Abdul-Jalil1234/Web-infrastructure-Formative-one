@@ -1,0 +1,47 @@
+Sources, Credits & AI Transparency
+Purpose of this document
+This document discloses all uses of AI tools during the completion of the above assignment, in compliance with the course requirement that any AI assistance used to explain configuration directives, interpret error messages or log output, or clarify protocol behavior be logged in a Sources, Credits & AI Transparency report, referenced according to APA 7th Edition guidelines.
+
+Ai Tool used : claude anthropic
+
+How Claude Ai was used
+Claude was used to : 
+Summarized the formative assignment's requirements and deliverables in plain language (endpoints, auth, CRUD, environment, automation, report, live demo).
+
+Clarified the purpose of the environment key-value store, the secret vs default variable type, and what the enabled:true/false flag controls as in the environment variables file.
+
+Explained the structure and JavaScript test scripts (pm.test, pm.expect) for the Login, Refresh Token,Get/Create/Update/Delete Product, and negative-test requests in the collection
+
+Clarified that importing a file into Postman is a one-time copy operation, not a live sync, and that re-importing an updated file is required to reflect changes made outside the Postman application.
+
+Statement of Original Work
+I affirms that all postman requests were executed by me and all screenshots were personally captured by in my own postman client environment.The AI tool was used as a learning and productivity aid consistent with the course's AI use policy, and not as a substitute for the my own understanding or execution of the assignment.
+
+References (APA 7th Edition)
+Anthropic. (2026). Claude (Sonnet 5) [Large language model]. https://claude.ai
+Postman, Inc. (2024). Postman collection format schema (Version 2.1.0) [Computer software
+documentation]. https://schema.postman.com/json/collection/v2.1.0/docs/index.html
+DummyJSON. (2024). DummyJSON — free fake REST API for placeholder JSON data [API
+documentation]. https://dummyjson.com/docs
+
+
+
+
+
+
+
+
+
+.
+
+
+
+
+
+
+
+
+
+
+
+
